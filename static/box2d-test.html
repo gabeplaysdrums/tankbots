@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>box2d test</title>
+
+    <style type="text/css">
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #canvas {
+            display: block;
+            background-color: #333333;
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+        }
+
+    </style>
+
+    <script src="js/jquery-1.11.1.min.js"></script>
+    <script src="js/Box2dWeb-2.1.a.3.min.js"></script>
+    <script type="text/javascript">
+
+        window.requestAnimFrame = (function(){
+            return (
+                window.requestAnimationFrame || 
+                window.webkitRequestAnimationFrame || 
+                window.mozRequestAnimationFrame    || 
+                window.oRequestAnimationFrame      || 
+                window.msRequestAnimationFrame     || 
+                function(/* function */ callback, /* DOMElement */ element){
+                    window.setTimeout(callback, 1000 / 60);
+                }
+            );
+        })();
+
+        $(function() {
+
+            // constants
+            var SCALE = 30;
+
+            // translate from window to world coordinates
+            function coord(x)
+            {
+                return x / SCALE;
+            }
+
+            // aliases
+            var b2Body = Box2D.Dynamics.b2Body;
+            var b2BodyDef = Box2D.Dynamics.b2BodyDef;
+            var b2CircleShape = Box2D.Collision.Shapes.b2CircleShape;
+            var b2DebugDraw = Box2D.Dynamics.b2DebugDraw;
+            var b2Fixture = Box2D.Dynamics.b2Fixture;
+            var b2FixtureDef = Box2D.Dynamics.b2FixtureDef;
+            var b2MassData = Box2D.Collision.Shapes.b2MassData;
+            var b2PolygonShape = Box2D.Collision.Shapes.b2PolygonShape;
+            var b2RevoluteJointDef = Box2D.Dynamics.Joints.b2RevoluteJointDef;
+            var b2FrictionJointDef = Box2D.Dynamics.Joints.b2FrictionJointDef;
+            var b2WeldJointDef = Box2D.Dynamics.Joints.b2WeldJointDef;
+            var b2Vec2 = Box2D.Common.Math.b2Vec2;
+            var b2World = Box2D.Dynamics.b2World;
+
+            // setup canvas
+            var $canvas = $("#canvas");
+
+            // resize canvas
+            {
+                function resizeCanvas()
+                {
+                    $canvas
+                        .prop("width", $(window).width())
+                        .prop("height", $(window).height());
+                }
+    
+                resizeCanvas();
+                $(window).resize(resizeCanvas);
+            }
+
+            // create the world
+            var world = new b2World(new b2Vec2(0, 0), true);
+
+            // create walls
+            {
+                function addWall(width, height, x, y)
+                {
+                    var fixDef = new b2FixtureDef();
+                    fixDef.density = 1.0;
+                    fixDef.friction = 0.5;
+                    fixDef.restitution = 0.2;
+                    fixDef.shape = new b2PolygonShape();
+                    fixDef.shape.SetAsBox(coord(width / 2), coord(height / 2));
+    
+                    var bodyDef = new b2BodyDef();
+                    bodyDef.type = b2Body.b2_staticBody;
+                    bodyDef.position.x = coord(x);
+                    bodyDef.position.y = coord(y);
+    
+                    world.CreateBody(bodyDef).CreateFixture(fixDef);
+                }
+
+                addWall($canvas.width(), 10, $canvas.width() / 2, $canvas.height());
+                addWall($canvas.width(), 10, $canvas.width() / 2, 0);
+                addWall(10, $canvas.height(), 0, $canvas.height() / 2);
+                addWall(10, $canvas.height(), $canvas.width(), $canvas.height() / 2);
+            }
+
+            var body;
+            var turret;
+            var joint;
+
+            // create the tank body
+            {
+                var fixDef = new b2FixtureDef();
+                fixDef.density = 1.0;
+                fixDef.friction = 0.5;
+                fixDef.restitution = 0.01;
+                fixDef.shape = new b2PolygonShape();
+                fixDef.shape.SetAsBox(coord(70 / 2), coord(50 / 2));
+
+                var bodyDef = new b2BodyDef();
+                bodyDef.type = b2Body.b2_dynamicBody;
+                bodyDef.position.x = coord($canvas.width() / 2);
+                bodyDef.position.y = coord($canvas.height() / 2);
+
+                body = world.CreateBody(bodyDef)
+                body.SetLinearDamping(2.0);
+                body.SetAngularDamping(4.0);
+
+                body.CreateFixture(fixDef);
+            }
+
+            // create the tank turret
+            {
+                var bodyDef = new b2BodyDef();
+                bodyDef.type = b2Body.b2_dynamicBody;
+                bodyDef.position.x = coord($canvas.width() / 2);
+                bodyDef.position.y = coord($canvas.height() / 2);
+
+                turret = world.CreateBody(bodyDef)
+                turret.SetAngularDamping(40.0);
+
+                {
+                    var fixDef = new b2FixtureDef();
+                    fixDef.density = 0.01;
+                    fixDef.friction = 0.5;
+                    fixDef.restitution = 0.01;
+                    fixDef.shape = new b2PolygonShape();
+    
+                    fixDef.shape.SetAsBox(coord(40 / 2), coord(30 / 2));
+                    turret.CreateFixture(fixDef);
+                }
+
+                {
+                    var fixDef = new b2FixtureDef();
+                    fixDef.density = 0.01;
+                    fixDef.friction = 0.5;
+                    fixDef.restitution = 0.01;
+                    fixDef.shape = new b2PolygonShape();
+
+                    fixDef.shape.SetAsOrientedBox(
+                        coord(30 / 2), coord(10 / 2),
+                        new b2Vec2(coord(40 / 2 + 30 / 2), coord(0)),
+                        0
+                    );
+
+                    turret.CreateFixture(fixDef);
+                }
+
+            }
+
+            // create turret joint
+            {
+                var jointDef = new b2RevoluteJointDef();
+                jointDef.Initialize(body, turret, body.GetWorldCenter());
+                joint = world.CreateJoint(jointDef);
+
+                joint.EnableMotor(true);
+            }
+
+            $(window).keydown(function(event) {
+
+                var FORCE = 500;
+                var TURN_SPEED = Math.PI / 24;
+                var TORQUE = 50;
+                var MOTOR_SPEED = 200;
+                var MOTOR_TORQUE = 0.2;
+
+                var d = 0;
+                var a = body.GetAngle();
+                var a2 = turret.GetAngle();
+                var t = 0;
+                var t2 = 0;
+                var s = 0;
+
+                switch (event.keyCode)
+                {
+                    case 40: // down
+                        d = FORCE;
+                        break;
+                    case 38: // up
+                        d = -FORCE;
+                        break;
+                    case 37: // left
+                        t = -TORQUE;
+                        break;
+                    case 39: // right
+                        t = TORQUE;
+                        break;
+                    case 90: // z
+                        s = -MOTOR_SPEED;
+                        t2 = MOTOR_TORQUE;
+                        break;
+                    case 88: // x
+                        s = MOTOR_SPEED;
+                        t2 = MOTOR_TORQUE;
+                        break;
+                    case 32: // space
+                    {
+                        var bullet;
+
+                        {
+                            var bodyDef = new b2BodyDef();
+                            bodyDef.type = b2Body.b2_dynamicBody;
+                            bodyDef.position = turret.GetPosition();
+
+                            var len = coord(40 / 2 + 30);
+
+                            bodyDef.position.Add(new b2Vec2(
+                                len * Math.cos(a2),
+                                len * Math.sin(a2)
+                            ));
+
+                            bullet = world.CreateBody(bodyDef)
+                        }
+
+                        {
+                            var fixDef = new b2FixtureDef();
+                            fixDef.density = 0.01;
+                            fixDef.friction = 0.5;
+                            fixDef.restitution = 0.5;
+                            fixDef.shape = new b2PolygonShape();
+    
+                            fixDef.shape.SetAsBox(coord(2 / 2), coord(2 / 2));
+                            bullet.CreateFixture(fixDef);
+                        }
+
+                        var m = 0.5;
+                        var v = new b2Vec2(
+                            m * Math.cos(a2),
+                            m * Math.sin(a2)
+                        );
+
+                        bullet.ApplyImpulse(v, bullet.GetPosition());
+                        v.Multiply(-2);
+                        turret.ApplyImpulse(v, turret.GetPosition());
+
+                        break;
+                    }
+                }
+
+                // accelerate
+                body.ApplyForce(new b2Vec2(
+                    d * Math.cos(a),
+                    d * Math.sin(a)
+                ), body.GetPosition());
+
+                // turn the body
+                body.ApplyTorque(t);
+
+                // turn the turret
+                joint.SetMotorSpeed(s);
+                joint.SetMaxMotorTorque(t2);
+
+            });
+
+            $(window).keyup(function(event) {
+
+                switch (event.keyCode)
+                {
+                    case 90: // z
+                    case 88: // x
+                        joint.SetMotorSpeed(0);
+                        joint.SetMaxMotorTorque(0);
+                        break;
+                }
+
+            });
+
+            //setup debug draw
+            {
+                var debugDraw = new b2DebugDraw();
+                debugDraw.SetSprite($canvas.get(0).getContext("2d"));
+                debugDraw.SetDrawScale(SCALE);
+                debugDraw.SetFillAlpha(0.3);
+                debugDraw.SetLineThickness(1.0);
+                debugDraw.SetFlags(b2DebugDraw.e_shapeBit | b2DebugDraw.e_jointBit);
+                world.SetDebugDraw(debugDraw);
+            }
+
+            function update()
+            {
+                world.Step(
+                    1 / 60,   // frame-rate
+                    10,       // velocity iterations
+                    10        // position iterations
+                );
+
+                world.DrawDebugData();
+                world.ClearForces();
+             
+                requestAnimFrame(update);
+            }
+
+            update();
+
+        });
+
+    </script>
+  </head>
+  <body>
+    <canvas id="canvas" />
+  </body>
+</html>
