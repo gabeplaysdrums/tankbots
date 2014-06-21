@@ -10,6 +10,7 @@
       padding: 0;
       width: 100%;
       height: 100%;
+      overflow: hidden;
     }
 
     .no-select {
@@ -87,7 +88,7 @@
     }
 
     button {
-      padding: 10px;
+      padding: 5px;
     }
 
     #apply-btn {
@@ -96,6 +97,8 @@
 
 </style>
 <script src="{% static 'js/ace/src-min-noconflict/ace.js' %}"></script>
+<link rel="jsandbox" href="{% static 'js/jsandbox-worker.js' %}" />
+<script src="{% static 'js/jsandbox.js' %}"></script>
 <script type="text/javascript">
 
     $(function() {
@@ -103,6 +106,49 @@
         var editor = ace.edit("editor");
         //editor.setTheme("ace/theme/monokai");
         editor.getSession().setMode("ace/mode/javascript");
+
+        var sandbox;
+        
+        function applyCode()
+        {
+            if (sandbox)
+            {
+                sandbox.terminate();
+            }
+
+            sandbox = new JSandbox();
+            sandbox.load("{% static 'js/tankbots-worker.js' %}", function() { 
+                sandbox.exec(editor.getValue());
+                $applyBtn.prop("disabled", true);
+            });
+        }
+
+        applyCode();
+
+        var $applyBtn = $("#apply-btn");
+
+        editor.on("change", function(e) {
+            $applyBtn.prop("disabled", false);
+        });
+
+        $applyBtn.click(function() {
+            applyCode();
+        });
+
+        $("#dispatch-btn").click(function() {
+            sandbox.eval(
+                "__dispatch__(input)", 
+                function(data) {
+                    window.alert(JSON.stringify(data));
+                }, 
+                {
+                    "step": 0,
+                    "tank": null,
+                    "friends": [],
+                    "enemies": [],
+                }
+            );
+        });
 
         var $canvas = $("#canvas");
 
@@ -177,14 +223,21 @@
         {% spaceless %}
         <td id="menu">
           <button id="apply-btn">Apply</button>
-          <button>Help</button>
+          <button id="dispatch-btn">Dispatch</button>
         </td>
         {% endspaceless %}
       </tr>
       <tr>
         <td>
           <div id="editor">
-function __update__(tank, friends, enemies)
+/*
+ * called on each step of the simulation for each tank you control
+ * @param step - step count
+ * @param tank - the tank
+ * @param friends - array of friendly tanks in the world
+ * @param enemies - array of enemy tanks in the world
+ */
+function __update__(step, tank, friends, enemies)
 {
     return {
         //TODO: return action(s) to do in this step:
