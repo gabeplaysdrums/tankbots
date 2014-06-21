@@ -95,62 +95,83 @@
       width: 100px;
     }
 
+    #pause-toggle-btn {
+      width: 75px;
+    }
+
 </style>
 <script src="{% static 'js/ace/src-min-noconflict/ace.js' %}"></script>
 <link rel="jsandbox" href="{% static 'js/jsandbox-worker.js' %}" />
 <script src="{% static 'js/jsandbox.js' %}"></script>
+<script src="{% static 'js/Box2dWeb-2.1.a.3.min.js' %}"></script>
+<script src="{% static 'js/tankbots-sim.js' %}"></script>
 <script type="text/javascript">
 
-    $(function() {
-
-        var editor = ace.edit("editor");
-        //editor.setTheme("ace/theme/monokai");
-        editor.getSession().setMode("ace/mode/javascript");
-
-        var sandbox;
-        
-        function applyCode()
-        {
-            if (sandbox)
-            {
-                sandbox.terminate();
-            }
-
-            sandbox = new JSandbox();
-            sandbox.load("{% static 'js/tankbots-worker.js' %}", function() { 
-                sandbox.exec(editor.getValue());
-                $applyBtn.prop("disabled", true);
-            });
-        }
-
-        applyCode();
-
-        var $applyBtn = $("#apply-btn");
-
-        editor.on("change", function(e) {
-            $applyBtn.prop("disabled", false);
-        });
-
-        $applyBtn.click(function() {
-            applyCode();
-        });
-
-        $("#dispatch-btn").click(function() {
-            sandbox.eval(
-                "__dispatch__(input)", 
-                function(data) {
-                    window.alert(JSON.stringify(data));
-                }, 
-                {
-                    "step": 0,
-                    "tank": null,
-                    "friends": [],
-                    "enemies": [],
-                }
-            );
-        });
+    jQuery.noConflict();
+ 
+    jQuery(document).ready(function($) {
 
         var $canvas = $("#canvas");
+        var world;
+        var sandbox;
+
+        // setup code panel
+        {
+            var editor = ace.edit("editor");
+            //editor.setTheme("ace/theme/monokai");
+            editor.getSession().setMode("ace/mode/javascript");
+            
+            function applyCode()
+            {
+                if (sandbox)
+                {
+                    sandbox.terminate();
+                }
+    
+                sandbox = new JSandbox();
+                sandbox.load("{% static 'js/tankbots-worker.js' %}", function() { 
+                    sandbox.exec(editor.getValue());
+                    $applyBtn.prop("disabled", true);
+                });
+            }
+    
+            applyCode();
+    
+            var $applyBtn = $("#apply-btn");
+    
+            editor.on("change", function(e) {
+                $applyBtn.prop("disabled", false);
+            });
+    
+            $applyBtn.click(function() {
+                applyCode();
+            });
+
+            var $pauseBtn = $("#pause-toggle-btn");
+
+            function toggleSim(running)
+            {
+                if (running)
+                {
+                    world.start();
+                }
+                else
+                {
+                    world.stop();
+                }
+
+                $pauseBtn.text(world.running() ? "Pause" : "Resume");
+            }
+
+            $pauseBtn.click(function() {
+                toggleSim(!world.running());
+            });
+
+            $("#step-btn").click(function() {
+                toggleSim(false);
+                world.step();
+            });
+        }
 
         // setup ui behaviors
         {
@@ -204,6 +225,58 @@
                 });
         }
 
+        // setup simulation
+        {
+            var worldWidth = $canvas.prop("width");
+            var worldHeight = $canvas.prop("height");
+
+            world = new TankBots.Sim.World(
+                worldWidth, 
+                worldHeight,
+                function() {
+
+                    var friends = [];
+
+                    for (var i=0; i < world.tanks.length; i++)
+                    {
+                        friends.push(world.tanks[i].info());
+                    }
+
+                    for (var i=0; i < world.tanks.length; i++)
+                    {
+                        (function(tank) {
+
+                            sandbox.eval(
+                                "__dispatch__(input)", 
+                                function(actions) {
+                                    tank.applyActions(actions);
+                                }, 
+                                {
+                                    "step": world.stepCount(),
+                                    "tank": tank.info(),
+                                    "friends": friends,
+                                    "enemies": [],
+                                }
+                            );
+
+                        })(world.tanks[i]);
+                    }
+                }
+            );
+
+            for (var i=0; i < 3; i++)
+            {
+                world.createTank(
+                    Math.random() * worldWidth, 
+                    Math.random() * worldHeight,
+                    Math.random() * 2 * Math.PI
+                );
+            }
+
+            world.createDebugDraw($canvas);
+            world.start();
+        }
+
     });
 
 </script>
@@ -223,7 +296,8 @@
         {% spaceless %}
         <td id="menu">
           <button id="apply-btn">Apply</button>
-          <button id="dispatch-btn">Dispatch</button>
+          <button id="pause-toggle-btn">Pause</button>
+          <button id="step-btn">Step</button>
         </td>
         {% endspaceless %}
       </tr>

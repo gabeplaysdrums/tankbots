@@ -4,7 +4,7 @@ function __dispatch__(data)
     {
         try 
         {
-            return __update__(data.tank, data.friends, data.enemies);
+            return __update__(data.step, data.tank, data.friends, data.enemies);
         }
         catch(ex)
         {
