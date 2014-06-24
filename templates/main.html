@@ -3,6 +3,7 @@
 
 {% block head %}
 
+<link rel="stylesheet" href="{% static 'css/console-theme.css' %}" />
 <style type="text/css">
 
     html, body {
@@ -47,10 +48,81 @@
       cursor: ew-resize;
     }
 
+    #debug {
+      position: relative;
+    }
+
+    #debug-content {
+      display: table;
+      width: 100%;
+      height: 100%;
+    }
+
+    #debug-menu {
+      background-color: rgba(200, 200, 200, 0.4);
+      padding: 3px;
+      position: absolute;
+      display: none;
+      top: 0;
+      left: 50%;
+      border-bottom-left-radius: 5px;
+      border-bottom-right-radius: 5px;
+      width: 200px;
+      margin-left: -110px;
+      text-align: center;
+      opacity: 0.1;
+    }
+
+    #debug-menu:hover {
+      opacity: 1.0;
+    }
+
+    #debug:hover #debug-menu {
+      display: block;
+    }
+
     #sim {
+      display: table-cell;
       vertical-align: middle;
       text-align: center;
       background-color: black;
+    }
+
+    #console {
+      width: 100%;
+      height: 100%;
+      display: none;
+    }
+
+    #watch {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      overflow: auto;
+      display: none;
+      vertical-align: top;
+    }
+
+    #watch table {
+      width: 100%;
+      font-family: "Consolas", "Monaco", monospace;
+      font-size: 8pt;
+    }
+
+    #watch table .name {
+      width: 200px;
+      background-color: #DDDDDD;
+    }
+
+    #watch table .value {
+      white-space: pre;
+    }
+
+    #watch table th, #watch table td {
+      padding: 3px;
+      vertical-align: top;
     }
 
     #code {
@@ -63,11 +135,11 @@
       height: 100%;
     }
 
-    #menu-row {
+    #code-menu-row {
       height: 0;
     }
 
-    #menu {
+    #code-menu {
       padding-left: 5px;
       padding-right: 5px;
       background-color: lightgray;
@@ -105,6 +177,7 @@
 <script src="{% static 'js/jsandbox.js' %}"></script>
 <script src="{% static 'js/Box2dWeb-2.1.a.3.min.js' %}"></script>
 <script src="{% static 'js/tankbots-sim.js' %}"></script>
+<script src="{% static 'js/jqconsole.min.js' %}"></script>
 <script type="text/javascript">
 
     jQuery.noConflict();
@@ -114,6 +187,10 @@
         var $canvas = $("#canvas");
         var world;
         var sandbox;
+        var $sim = $("#sim");
+        var $console = $("#console");
+        var $watch = $("#watch");
+        var jqconsole;
 
         // setup code panel
         {
@@ -133,6 +210,8 @@
                     sandbox.exec(editor.getValue());
                     $applyBtn.prop("disabled", true);
                 });
+
+                window.__sandbox = sandbox;
             }
     
             applyCode();
@@ -173,10 +252,126 @@
             });
         }
 
+        function updateConsoleLogs(callback)
+        {
+            if (!callback)
+            {
+                callback = function(){};
+            }
+
+            if (sandbox)
+            {
+                sandbox.eval(
+                    "__clear_log_messages__()",
+                    function(messages)
+                    {
+                        try
+                        {
+                            for (var i=0; i < messages.length; i++)
+                            {
+                                jqconsole.Write(messages[i] + "\n");
+                            }
+                        }
+                        catch (ex)
+                        {}
+
+                        callback();
+                    }
+                );
+            }
+        }
+
+        // setup console
+        {
+            // Creating the console.
+            var helpMessage = [
+                ":help   show help message",
+                ":clear  clear console",
+                "Ctrl+C  cancel command",
+                "",
+                "",
+            ].join("\n");
+
+            jqconsole = $("#console").jqconsole(helpMessage, ">>> ");
+    
+            // Abort prompt on Ctrl+C.
+            jqconsole.RegisterShortcut("C", function() {
+              jqconsole.AbortPrompt();
+              handler();
+            });
+
+            // matching
+            jqconsole.RegisterMatching("{", "}", "brace");
+            jqconsole.RegisterMatching("(", ")", "paran");
+            jqconsole.RegisterMatching("[", "]", "bracket");
+
+            var SPECIAL_COMMANDS = {
+                ":help": function() { jqconsole.Write(helpMessage); },
+                ":clear": function() { jqconsole.Clear(); },
+            };
+
+            // Handle a command.
+            var handler = function(command) {
+
+                if (SPECIAL_COMMANDS[command])
+                {
+                    SPECIAL_COMMANDS[command]();
+                }
+                else if (command)
+                {
+                    sandbox.eval(
+                        command, 
+                        function(result) {
+                            updateConsoleLogs(function() {
+
+                                if (result === undefined)
+                                {
+                                    return;
+                                }
+
+                                jqconsole.Write(
+                                    JSON.stringify(result, undefined, 2) + "\n"
+                                );
+                            });
+                        },
+                        undefined,
+                        function(ex) {
+                            jqconsole.Write("Error: " + ex + "\n");
+                        });
+                }
+
+                jqconsole.Prompt(true, handler, function(command) {
+
+                    if (SPECIAL_COMMANDS[command])
+                    {
+                        return false;
+                    }
+
+                    try {
+                        Function(command);
+                    } 
+                    catch (ex)
+                    {
+                        if (/[\[\{\(]$/.test(command))
+                        {
+                            return 1;
+                        }
+                        else
+                        {
+                            return 0;
+                        }
+                    }
+
+                    return false;
+                });
+            };
+    
+            // Initiate the first prompt.
+            handler();
+        }
+
         // setup ui behaviors
         {
-            var $sim = $("#sim");
-    
             function resizeSim()
             {
                 var w = $sim.width();
@@ -190,6 +385,10 @@
                 }
     
                 $canvas.width(w).height(h);
+
+                $watch
+                    .height($(window).height())
+                    .css("max-height", $(window).height());
             }
     
             $sim.resize(resizeSim);
@@ -197,6 +396,26 @@
             $(window).resize(function() {
                 $canvas.width(0).height(0);
                 resizeSim();
+            });
+
+            resizeSim();
+
+            $("#show-sim-btn").click(function() {
+                $sim.show();
+                $console.hide();
+                $watch.hide();
+                resizeSim();
+            });
+            $("#show-console-btn").click(function() {
+                $sim.hide();
+                $console.show();
+                $watch.hide();
+                jqconsole.Focus();
+            });
+            $("#show-watch-btn").click(function() {
+                $sim.hide();
+                $console.hide();
+                $watch.show();
             });
     
             var dragging = false;
@@ -247,7 +466,7 @@
                         (function(tank) {
 
                             sandbox.eval(
-                                "__dispatch__(input)", 
+                                "__dispatch_update__(input)", 
                                 function(actions) {
                                     tank.applyActions(actions);
                                 }, 
@@ -261,6 +480,43 @@
 
                         })(world.tanks[i]);
                     }
+
+                    sandbox.eval(
+                        "__get_watch_list__()",
+                        function(watch) {
+
+                            try
+                            {
+                                var $table = $watch.find("tbody");
+                                $table.empty();
+    
+                                var keys = [];
+                                
+                                for (var key in watch)
+                                {
+                                    keys.push(key);
+                                }
+    
+                                keys.sort();
+                                
+                                for (var i=0; i < keys.length; i++)
+                                {
+                                    var key = keys[i];
+                                    $row = $("<tr />");
+                                    $row.append($("<td class='name' />").text(key));
+                                    $row.append($("<td class='value' />").text(
+                                        JSON.stringify(watch[key], undefined, 2)
+                                    ));
+                                    $table.append($row);
+                                }
+                            }
+                            catch(ex)
+                            {}
+
+                        }
+                    );
+
+                    updateConsoleLogs();
                 }
             );
 
@@ -286,15 +542,38 @@
 {% block content %}
 
 <div id="content">
-  <div id="sim" class="panel no-select">
-    <canvas id="canvas" width="1280" height="800" />
+  <div id="debug" class="panel">
+    {% spaceless %}
+    <div id="debug-content">
+      <div id="sim" class="no-select">
+        <canvas id="canvas" width="1280" height="800" />
+      </div>
+      <div id="console"></div>
+      <div id="watch">
+        <table>
+          <thead>
+            <tr>
+              <th class="name">Name</th>
+              <th class="value">Value</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="debug-menu">
+      <button id="show-sim-btn">Simulation</button>
+      <button id="show-console-btn">Console</button>
+      <button id="show-watch-btn">Watch</button>
+    </div>
+    {% endspaceless %}
   </div>
   <div id="split" class="panel"><a title="Resize (double-click to hide/show)"></a></div>
   <div id="code" class="panel">
     <table border="0" cellpadding="0" cellspacing="0">
-      <tr id="menu-row" class="no-select">
+      <tr id="code-menu-row" class="no-select">
         {% spaceless %}
-        <td id="menu">
+        <td id="code-menu">
           <button id="apply-btn">Apply</button>
           <button id="pause-toggle-btn">Pause</button>
           <button id="step-btn">Step</button>
@@ -313,6 +592,10 @@
  */
 function __update__(step, tank, friends, enemies)
 {
+    // use the __watch__ function to display values in the watch list
+    __watch__("step", step);
+    __watch__("tank id=" + tank.id, tank);
+
     return {
         //TODO: return action(s) to do in this step:
         // "accel": /* "forward" or "reverse" */,
