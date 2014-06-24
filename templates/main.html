@@ -191,6 +191,7 @@
         var $console = $("#console");
         var $watch = $("#watch");
         var jqconsole;
+        var debugDraw;
 
         // setup code panel
         {
@@ -269,7 +270,7 @@
                         {
                             for (var i=0; i < messages.length; i++)
                             {
-                                jqconsole.Write(messages[i] + "\n");
+                                jqconsole.Write(messages[i].message + "\n", messages[i].className);
                             }
                         }
                         catch (ex)
@@ -336,7 +337,7 @@
                         },
                         undefined,
                         function(ex) {
-                            jqconsole.Write("Error: " + ex + "\n");
+                            jqconsole.Write("error: " + ex + "\n", "jqconsole-error");
                         });
                 }
 
@@ -516,6 +517,13 @@
                         }
                     );
 
+                    sandbox.eval(
+                        "__clear_rect_list__()",
+                        function(rects) {
+                            world.debugRects = rects;
+                        }
+                    );
+
                     updateConsoleLogs();
                 }
             );
@@ -529,7 +537,7 @@
                 );
             }
 
-            world.createDebugDraw($canvas);
+            debugDraw = world.createDebugDraw($canvas);
             world.start();
         }
 
@@ -546,7 +554,7 @@
     {% spaceless %}
     <div id="debug-content">
       <div id="sim" class="no-select">
-        <canvas id="canvas" width="1280" height="800" />
+        <canvas id="canvas" width="1920" height="1200" />
       </div>
       <div id="console"></div>
       <div id="watch">

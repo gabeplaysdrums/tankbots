@@ -1,5 +1,5 @@
-var WORLD_WIDTH = 1280 / 30;
-var WORLD_HEIGHT = 800 / 30;
+var WORLD_WIDTH = 1920 / 30;
+var WORLD_HEIGHT = 1200 / 30;
 var ANGLE_MARGIN = 10 * Math.PI/180;
 var DISTANCE_MARGIN = 2.0;
 
@@ -59,6 +59,7 @@ function __update__(step, tank, friends, enemies)
     
     var target = getTarget(tank.id);
     __watch__("target id=" + tank.id, target);
+    __rect__(target.x - 1, target.y - 1, target.x + 1, target.y + 1);
     
     var d = dist(tank.position, target);
     var d_angle = fixAngle(d.angle - tank.angle);
@@ -96,5 +97,3 @@ function __update__(step, tank, friends, enemies)
         // "turret": /* "left", "right", or "fire" */,
     //};
 }
-
-

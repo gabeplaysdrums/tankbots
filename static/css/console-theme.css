@@ -38,3 +38,15 @@
 .jqconsole-composition {
   background-color: red;
 }
+.jqconsole-error {
+  color: red;
+}
+.jqconsole-warn {
+  color: yellow;
+}
+.jqconsole-info {
+  color: gray;
+}
+.jqconsole-debug {
+  color: lightblue;
+}

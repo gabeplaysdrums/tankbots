@@ -51,8 +51,21 @@ var __clear_log_messages__;
         return x.join(" ");
     }
 
+    function addMessage(s, className)
+    {
+        if (className === undefined)
+        {
+            className = "";
+        }
+
+        messages.push({
+            "message": s,
+            "className": className,
+        });
+    }
+
     __log__ = function() {
-        messages.push(join(arguments));
+        addMessage(join(arguments), "");
     };
 
     __get_log_messages__ = function() {
@@ -69,18 +82,47 @@ var __clear_log_messages__;
     console.log = function() { __log__.apply(this, arguments); }
 
     console.__warn = console.warn;
-    console.warn = function() { __log__("warning: " + join(arguments)); }
+    console.warn = function() { addMessage("warning: " + join(arguments), "jqconsole-warn"); }
 
     console.__error = console.error;
-    console.error = function() { __log__("error: " + join(arguments)); }
+    console.error = function() { addMessage("error: " + join(arguments), "jqconsole-error"); }
 
     console.__debug = console.debug;
-    console.debug = function() { __log__("debug: " + join(arguments)); }
+    console.debug = function() { addMessage("debug: " + join(arguments), "jqconsole-debug"); }
 
     console.__info = console.info;
-    console.info = function() { __log__("info: " + join(arguments)); }
+    console.info = function() { addMessage("info: " + join(arguments), "jqconsole-info"); }
 
     console.__clear = console.clear;
     console.clear = function(){};
+
+})();
+
+var __rect__;
+var __get_rect_list__;
+var __clear_rect_list__;
+
+(function() {
+
+    var rects = [];
+
+    __rect__ = function(left, top, right, bottom) {
+        rects.push({
+            "top": top,
+            "left": left,
+            "right": right,
+            "bottom": bottom,
+        });
+    };
+
+    __get_rect_list__ = function() {
+        return rects;
+    };
+
+    __clear_rect_list__ = function() {
+        var r = rects;
+        rects = [];
+        return r;
+    };
 
 })();

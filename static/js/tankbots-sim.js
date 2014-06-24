@@ -17,15 +17,16 @@ window.requestAnimFrame = (function(){
     var b2Body = Box2D.Dynamics.b2Body;
     var b2BodyDef = Box2D.Dynamics.b2BodyDef;
     var b2CircleShape = Box2D.Collision.Shapes.b2CircleShape;
+    var b2Color = Box2D.Common.b2Color;
     var b2DebugDraw = Box2D.Dynamics.b2DebugDraw;
     var b2Fixture = Box2D.Dynamics.b2Fixture;
     var b2FixtureDef = Box2D.Dynamics.b2FixtureDef;
+    var b2FrictionJointDef = Box2D.Dynamics.Joints.b2FrictionJointDef;
     var b2MassData = Box2D.Collision.Shapes.b2MassData;
     var b2PolygonShape = Box2D.Collision.Shapes.b2PolygonShape;
     var b2RevoluteJointDef = Box2D.Dynamics.Joints.b2RevoluteJointDef;
-    var b2FrictionJointDef = Box2D.Dynamics.Joints.b2FrictionJointDef;
-    var b2WeldJointDef = Box2D.Dynamics.Joints.b2WeldJointDef;
     var b2Vec2 = Box2D.Common.Math.b2Vec2;
+    var b2WeldJointDef = Box2D.Dynamics.Joints.b2WeldJointDef;
     var b2World = Box2D.Dynamics.b2World;
 
     // constants
@@ -55,6 +56,7 @@ window.requestAnimFrame = (function(){
             this._onstep = onstep;
             this._stepCount = 0;
             this.tanks = [];
+            this.debugRects = [];
 
             // create the world
             this._world = new b2World(new b2Vec2(0, 0), true);
@@ -89,14 +91,13 @@ window.requestAnimFrame = (function(){
 
         createDebugDraw: function($canvas) {
 
-            var debugDraw = new b2DebugDraw();
-            debugDraw.SetSprite($canvas.get(0).getContext("2d"));
-            debugDraw.SetDrawScale(SCALE);
-            debugDraw.SetFillAlpha(0.3);
-            debugDraw.SetLineThickness(1.0);
-            debugDraw.SetFlags(b2DebugDraw.e_shapeBit | b2DebugDraw.e_jointBit);
-            this._world.SetDebugDraw(debugDraw);
-            return debugDraw;
+            this._debugDraw = new b2DebugDraw();
+            this._debugDraw.SetSprite($canvas.get(0).getContext("2d"));
+            this._debugDraw.SetDrawScale(SCALE);
+            this._debugDraw.SetFillAlpha(0.3);
+            this._debugDraw.SetLineThickness(1.0);
+            this._debugDraw.SetFlags(b2DebugDraw.e_shapeBit | b2DebugDraw.e_jointBit);
+            this._world.SetDebugDraw(this._debugDraw);
         },
 
         start: function() {
@@ -135,6 +136,25 @@ window.requestAnimFrame = (function(){
             );
 
             this._world.DrawDebugData();
+
+            if (this.debugRects)
+            {
+                for (var i=0; i < this.debugRects.length; i++)
+                {
+                    var r = this.debugRects[i];
+                    this._debugDraw.DrawPolygon(
+                        [
+                            new b2Vec2(r.left, r.top),
+                            new b2Vec2(r.left, r.bottom),
+                            new b2Vec2(r.right, r.bottom),
+                            new b2Vec2(r.right, r.top),
+                        ],
+                        4,
+                        new b2Color(1, 1, 0)
+                    );
+                }
+            }
+
             this._world.ClearForces();
             this._stepCount++;
         },
