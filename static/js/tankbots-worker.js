@@ -1,3 +1,19 @@
+function __dispatch_init__(data)
+{
+    if (typeof "__init__" !== "undefined")
+    {
+        try 
+        {
+            return __init__(data.world, data.friends);
+        }
+        catch(ex)
+        {
+        }
+    }
+
+    return null;
+}
+
 function __dispatch_update__(data)
 {
     if (typeof "__update__" !== "undefined")

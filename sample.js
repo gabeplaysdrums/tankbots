@@ -1,8 +1,7 @@
-var WORLD_WIDTH = 1920 / 30;
-var WORLD_HEIGHT = 1200 / 30;
 var ANGLE_MARGIN = 10 * Math.PI/180;
 var DISTANCE_MARGIN = 2.0;
 
+var world;
 var targets = {};
 
 function getTarget(id, reset)
@@ -10,8 +9,8 @@ function getTarget(id, reset)
     if (!targets[id] || reset)
     {
         targets[id] = {
-            "x": 5 + Math.random() * (WORLD_WIDTH - 5),
-            "y": 5 + Math.random() * (WORLD_HEIGHT - 5),
+            "x": 5 + Math.random() * (world.width - 5),
+            "y": 5 + Math.random() * (world.height - 5),
         };
     }
     
@@ -44,6 +43,31 @@ function fixAngle(a)
     return a;
 }
 
+function rayCast(pos, angle, dist, bounds)
+{
+    var pos2 = {
+        "x": pos.x + dist * Math.cos(angle),
+        "y": pos.y + dist * Math.sin(angle)
+    };
+    
+    __rect__(pos2.x - 0.1, pos2.y - 0.1, pos2.x + 0.1, pos2.y + 0.1);
+    
+    return (
+        bounds.left <= pos2.x && pos2.x <= bounds.right &&
+        bounds.top <= pos2.y && pos2.y <= bounds.bottom
+        );
+}
+
+/* 
+ * called once when the simulation is initialized 
+ * @param world - info about the world
+ * @param friends - array of friendly tanks in the world
+ */
+function __init__(world_, friends)
+{
+    world = world_;
+}
+
 /*
  * called on each step of the simulation for each tank you control
  * @param step - step count
@@ -59,12 +83,21 @@ function __update__(step, tank, friends, enemies)
     
     var target = getTarget(tank.id);
     __watch__("target id=" + tank.id, target);
+
+    // draw the target on the simulation canvas for debugging purposes
     __rect__(target.x - 1, target.y - 1, target.x + 1, target.y + 1);
     
     var d = dist(tank.position, target);
     var d_angle = fixAngle(d.angle - tank.angle);
     __watch__("dist id=" + tank.id, d);
     __watch__("d_angle id=" + tank.id, d_angle);
+    
+    __rect__(
+        tank.bounds.left,
+        tank.bounds.top,
+        tank.bounds.right,
+        tank.bounds.bottom
+        );
     
     var actions = {};
     
@@ -85,6 +118,17 @@ function __update__(step, tank, friends, enemies)
     else if (d_angle > ANGLE_MARGIN)
     {
         actions.steer = "right";
+    }
+    
+    if (actions.accel === "forward")
+    {
+        for (var i=0; i < friends.length; i++)
+        {
+            if (rayCast(tank.position, tank.angle, 6.0, friends[i].bounds))
+            {
+                actions.steer = "right";
+            }
+        }
     }
     
     __watch__("actions id=" + tank.id, actions);

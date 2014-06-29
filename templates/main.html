@@ -86,6 +86,25 @@
       vertical-align: middle;
       text-align: center;
       background-color: black;
+      position: relative;
+    }
+
+    #sim-options {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      margin-left: -150px; 
+      width: 300px;
+      background-color: rgba(200, 200, 200, 0.4);
+      color: white;
+      padding: 5px;
+      border-top-left-radius: 5px;
+      border-top-right-radius: 5px;
+      opacity: 0.1;
+    }
+
+    #sim-options:hover {
+      opacity: 1.0;
     }
 
     #console {
@@ -192,6 +211,7 @@
         var $watch = $("#watch");
         var jqconsole;
         var debugDraw;
+        var applyCode;
 
         // setup code panel
         {
@@ -199,8 +219,9 @@
             //editor.setTheme("ace/theme/monokai");
             editor.getSession().setMode("ace/mode/javascript");
             
-            function applyCode()
-            {
+            applyCode = function() {
+                jqconsole.Write("\n--- @Apply: " + new Date() + " ---\n\n", "jqconsole-info");
+
                 if (sandbox)
                 {
                     sandbox.terminate();
@@ -208,14 +229,25 @@
     
                 sandbox = new JSandbox();
                 sandbox.load("{% static 'js/tankbots-worker.js' %}", function() { 
-                    sandbox.exec(editor.getValue());
-                    $applyBtn.prop("disabled", true);
+                    sandbox.exec(editor.getValue(), function() {
+                        $applyBtn.prop("disabled", true);
+            
+                        sandbox.eval(
+                            "__dispatch_init__(input)",
+                            function(result)
+                            {
+                                updateConsoleLogs(function() {
+                                });
+                            },
+                            {
+                                "world": world.info(),
+                                "friends": getFriends(),
+                            }
+                        );
+                    });
                 });
-
-                window.__sandbox = sandbox;
-            }
+            };
     
-            applyCode();
     
             var $applyBtn = $("#apply-btn");
     
@@ -418,6 +450,10 @@
                 $console.hide();
                 $watch.show();
             });
+
+            $("#sim-options-show-debug-overlays").change(function() {
+                world.debugOverlaysEnabled = $(this).prop("checked");
+            });
     
             var dragging = false;
     
@@ -450,17 +486,24 @@
             var worldWidth = $canvas.prop("width");
             var worldHeight = $canvas.prop("height");
 
+            function getFriends()
+            {
+                var friends = [];
+
+                for (var i=0; i < world.tanks.length; i++)
+                {
+                    friends.push(world.tanks[i].info());
+                }
+
+                return friends;
+            }
+
             world = new TankBots.Sim.World(
                 worldWidth, 
                 worldHeight,
                 function() {
 
-                    var friends = [];
-
-                    for (var i=0; i < world.tanks.length; i++)
-                    {
-                        friends.push(world.tanks[i].info());
-                    }
+                    var friends = getFriends();
 
                     for (var i=0; i < world.tanks.length; i++)
                     {
@@ -538,8 +581,10 @@
             }
 
             debugDraw = world.createDebugDraw($canvas);
-            world.start();
         }
+
+        applyCode();
+        world.start();
 
     });
 
@@ -554,7 +599,13 @@
     {% spaceless %}
     <div id="debug-content">
       <div id="sim" class="no-select">
-        <canvas id="canvas" width="1920" height="1200" />
+        <canvas id="canvas" width="1920" height="1200"></canvas>
+        <div id="sim-options">
+          <span>
+            <input type="checkbox" id="sim-options-show-debug-overlays" checked />
+            <label for="sim-options-show-debug-overlays">Show debug overlays</label>
+          </span>
+        </div>
       </div>
       <div id="console"></div>
       <div id="watch">
@@ -591,6 +642,17 @@
       <tr>
         <td>
           <div id="editor">
+/* 
+ * called once when the simulation is initialized 
+ * @param world - info about the world
+ * @param friends - array of friendly tanks in the world
+ */
+function __init__(world, friends)
+{
+    console.info("world: " + JSON.stringify(world, undefined, 2));
+    console.info("friends: " + JSON.stringify(friends, undefined, 2));
+}
+
 /*
  * called on each step of the simulation for each tank you control
  * @param step - step count

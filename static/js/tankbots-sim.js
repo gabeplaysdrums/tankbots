@@ -14,6 +14,7 @@ window.requestAnimFrame = (function(){
 (function() {
 
     // aliases
+    var b2AABB = Box2D.Collision.b2AABB;
     var b2Body = Box2D.Dynamics.b2Body;
     var b2BodyDef = Box2D.Dynamics.b2BodyDef;
     var b2CircleShape = Box2D.Collision.Shapes.b2CircleShape;
@@ -38,6 +39,39 @@ window.requestAnimFrame = (function(){
         return x / SCALE;
     }
 
+    // get bounds from a body list
+    function getBounds(bodyList)
+    {
+        var aabb = null;
+
+        for (var i=0; i < bodyList.length; i++)
+        {
+            for (
+                var fixture = bodyList[i].GetFixtureList();
+                fixture != null; fixture = fixture.GetNext()
+            )
+            {
+                var ab = fixture.GetAABB();
+
+                if (!aabb)
+                {
+                    aabb = ab;
+                }
+                else
+                {
+                    aabb = b2AABB.Combine(aabb, ab);
+                }
+            }
+        }
+
+        return {
+            "left": aabb.lowerBound.x,
+            "top": aabb.lowerBound.y,
+            "right": aabb.upperBound.x,
+            "bottom": aabb.upperBound.y,
+        };
+    }
+
     // forward declare
     var World, Tank;
 
@@ -55,8 +89,10 @@ window.requestAnimFrame = (function(){
             this._running = false;
             this._onstep = onstep;
             this._stepCount = 0;
+            this._obstacles = [];
             this.tanks = [];
             this.debugRects = [];
+            this.debugOverlaysEnabled = true;
 
             // create the world
             this._world = new b2World(new b2Vec2(0, 0), true);
@@ -79,7 +115,9 @@ window.requestAnimFrame = (function(){
                     bodyDef.position.x = coord(x);
                     bodyDef.position.y = coord(y);
     
-                    self._world.CreateBody(bodyDef).CreateFixture(fixDef);
+                    var body = self._world.CreateBody(bodyDef);
+                    body.CreateFixture(fixDef);
+                    self._obstacles.push({ "bounds": getBounds([ body ]) });
                 }
 
                 addWall(this._width, 10, this._width / 2, this._height);
@@ -98,6 +136,8 @@ window.requestAnimFrame = (function(){
             this._debugDraw.SetLineThickness(1.0);
             this._debugDraw.SetFlags(b2DebugDraw.e_shapeBit | b2DebugDraw.e_jointBit);
             this._world.SetDebugDraw(this._debugDraw);
+            this._worldWidth = $canvas.prop("width") / SCALE;
+            this._worldHeight = $canvas.prop("height") / SCALE;
         },
 
         start: function() {
@@ -127,8 +167,6 @@ window.requestAnimFrame = (function(){
 
         step: function() {
 
-            this._onstep();
-
             this._world.Step(
                 1 / 60,   // frame-rate
                 10,       // velocity iterations
@@ -137,7 +175,7 @@ window.requestAnimFrame = (function(){
 
             this._world.DrawDebugData();
 
-            if (this.debugRects)
+            if (this.debugOverlaysEnabled && this.debugRects)
             {
                 for (var i=0; i < this.debugRects.length; i++)
                 {
@@ -155,6 +193,8 @@ window.requestAnimFrame = (function(){
                 }
             }
 
+            this._onstep();
+
             this._world.ClearForces();
             this._stepCount++;
         },
@@ -167,6 +207,14 @@ window.requestAnimFrame = (function(){
             var tank = new Tank(this._world, x, y, angle);
             this.tanks.push(tank);
             return tank;
+        },
+
+        info: function() {
+            return {
+                "width": this._worldWidth,
+                "height": this._worldHeight,
+                "obstacles": this._obstacles,
+            };
         },
 
     });
@@ -255,6 +303,33 @@ window.requestAnimFrame = (function(){
             var pos = this._body.GetWorldCenter();
             var vel = this._body.GetLinearVelocity();
 
+            var bodyList = [
+                this._body,
+                this._turret,
+            ];
+
+            var aabb = null;
+
+            for (var i=0; i < bodyList.length; i++)
+            {
+                for (
+                    var fixture = bodyList[i].GetFixtureList();
+                    fixture != null; fixture = fixture.GetNext()
+                )
+                {
+                    var ab = fixture.GetAABB();
+
+                    if (!aabb)
+                    {
+                        aabb = ab;
+                    }
+                    else
+                    {
+                        aabb = b2AABB.Combine(aabb, ab);
+                    }
+                }
+            }
+
             return {
                 "id": this._id,
                 "position": { "x": pos.x, "y": pos.y },
@@ -262,6 +337,7 @@ window.requestAnimFrame = (function(){
                 "turretAngle": this._turret.GetAngle(),
                 "velocity": { "x": vel.x, "y": vel.y },
                 "angularVelocity": this._body.GetAngularVelocity(),
+                "bounds": getBounds([ this._body, this._turret ]),
             }
         },
 
