@@ -1,4 +1,4 @@
-var ANGLE_MARGIN = 10 * Math.PI/180;
+var ANGLE_MARGIN = 5 * Math.PI/180;
 var DISTANCE_MARGIN = 2.0;
 
 var world;
@@ -43,21 +43,6 @@ function fixAngle(a)
     return a;
 }
 
-function rayCast(pos, angle, dist, bounds)
-{
-    var pos2 = {
-        "x": pos.x + dist * Math.cos(angle),
-        "y": pos.y + dist * Math.sin(angle)
-    };
-    
-    __rect__(pos2.x - 0.1, pos2.y - 0.1, pos2.x + 0.1, pos2.y + 0.1);
-    
-    return (
-        bounds.left <= pos2.x && pos2.x <= bounds.right &&
-        bounds.top <= pos2.y && pos2.y <= bounds.bottom
-        );
-}
-
 /* 
  * called once when the simulation is initialized 
  * @param world - info about the world
@@ -65,22 +50,40 @@ function rayCast(pos, angle, dist, bounds)
  */
 function __init__(world_, friends)
 {
+    console.info("world: " + JSON.stringify(world, undefined, 2));
+    console.info("friends: " + JSON.stringify(friends, undefined, 2));
     world = world_;
+}
+
+/*
+ * called on each step of the simulation
+ * @param step - step count
+ * @param friends - array of friendly tanks in the world
+ * @param enemies - array of enemy tanks in the world
+ * @param bullets - array of bullets in the world
+ * @param collisions - collisions that happened in this step
+ */
+function __update__(step, friends, enemies, bullets, collisions)
+{
+    // use the __watch__ function to display values in the watch list
+    __watch__("step", step);
+    __watch__("friends", friends);
+    __watch__("enemies", enemies);
+    
+    for (var i=0; i < collisions.length; i++)
+    {
+        var c = collisions[i];
+        console.log(c[0].class + " collided with " + c[1].class + "!");
+    }
 }
 
 /*
  * called on each step of the simulation for each tank you control
  * @param step - step count
- * @param tank - the tank
- * @param friends - array of friendly tanks in the world
- * @param enemies - array of enemy tanks in the world
+ * @param tank - the tank to command
  */
-function __update__(step, tank, friends, enemies)
+function __command__(step, tank)
 {
-    // use the __watch__ function to display values in the watch list
-    __watch__("step", step);
-    __watch__("tank id=" + tank.id, tank);
-    
     var target = getTarget(tank.id);
     __watch__("target id=" + tank.id, target);
 
@@ -89,16 +92,6 @@ function __update__(step, tank, friends, enemies)
     
     var d = dist(tank.position, target);
     var d_angle = fixAngle(d.angle - tank.angle);
-    __watch__("dist id=" + tank.id, d);
-    __watch__("d_angle id=" + tank.id, d_angle);
-    
-    __rect__(
-        tank.bounds.left,
-        tank.bounds.top,
-        tank.bounds.right,
-        tank.bounds.bottom
-        );
-    
     var actions = {};
     
     if (d.dist < DISTANCE_MARGIN)
@@ -120,24 +113,8 @@ function __update__(step, tank, friends, enemies)
         actions.steer = "right";
     }
     
-    if (actions.accel === "forward")
-    {
-        for (var i=0; i < friends.length; i++)
-        {
-            if (rayCast(tank.position, tank.angle, 6.0, friends[i].bounds))
-            {
-                actions.steer = "right";
-            }
-        }
-    }
+    actions.turret = (step % 2 === 0) ? "fire" : "left";
     
     __watch__("actions id=" + tank.id, actions);
     return actions;
-
-    //return {
-        //TODO: return action(s) to do in this step:
-        // "accel": /* "forward" or "reverse" */,
-        // "steer": /* "left" or "right" */,
-        // "turret": /* "left", "right", or "fire" */,
-    //};
 }

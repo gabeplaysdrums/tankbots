@@ -89,6 +89,10 @@
       position: relative;
     }
 
+    #sim:hover #sim-options {
+      display: block;
+    }
+
     #sim-options {
       position: absolute;
       bottom: 0;
@@ -101,6 +105,7 @@
       border-top-left-radius: 5px;
       border-top-right-radius: 5px;
       opacity: 0.1;
+      display: none;
     }
 
     #sim-options:hover {
@@ -285,6 +290,19 @@
             });
         }
 
+        function appendConsoleLogs(messages)
+        {
+            try
+            {
+                for (var i=0; i < messages.length; i++)
+                {
+                    jqconsole.Write(messages[i].message + "\n", messages[i].className);
+                }
+            }
+            catch (ex)
+            {}
+        }
+
         function updateConsoleLogs(callback)
         {
             if (!callback)
@@ -298,16 +316,7 @@
                     "__clear_log_messages__()",
                     function(messages)
                     {
-                        try
-                        {
-                            for (var i=0; i < messages.length; i++)
-                            {
-                                jqconsole.Write(messages[i].message + "\n", messages[i].className);
-                            }
-                        }
-                        catch (ex)
-                        {}
-
+                        appendConsoleLogs(messages);
                         callback();
                     }
                 );
@@ -490,84 +499,98 @@
             {
                 var friends = [];
 
-                for (var i=0; i < world.tanks.length; i++)
+                for (var id in world.tanks)
                 {
-                    friends.push(world.tanks[i].info());
+                    friends.push(world.tanks[id].info());
                 }
 
                 return friends;
             }
 
+            function getBullets()
+            {
+                var bullets = [];
+
+                for (var i=0; i < world.bullets.length; i++)
+                {
+                    bullets.push(world.bullets[i].info());
+                }
+
+                return bullets;
+            }
+
             world = new TankBots.Sim.World(
                 worldWidth, 
                 worldHeight,
-                function() {
+                {
+                    onstep: function() {
 
-                    var friends = getFriends();
-
-                    for (var i=0; i < world.tanks.length; i++)
-                    {
-                        (function(tank) {
-
-                            sandbox.eval(
-                                "__dispatch_update__(input)", 
-                                function(actions) {
-                                    tank.applyActions(actions);
-                                }, 
+                        sandbox.eval(
+                            "__step__(input)",
+                            function (data) {
+                                try
                                 {
-                                    "step": world.stepCount(),
-                                    "tank": tank.info(),
-                                    "friends": friends,
-                                    "enemies": [],
+                                    var watch = data["watch"];
+                                    var $table = $watch.find("tbody");
+                                    $table.empty();
+        
+                                    var keys = [];
+                                    
+                                    for (var key in watch)
+                                    {
+                                        keys.push(key);
+                                    }
+        
+                                    keys.sort();
+                                    
+                                    for (var i=0; i < keys.length; i++)
+                                    {
+                                        var key = keys[i];
+                                        $row = $("<tr />");
+                                        $row.append($("<td class='name' />").text(key));
+                                        $row.append($("<td class='value' />").text(
+                                            JSON.stringify(watch[key], undefined, 2)
+                                        ));
+                                        $table.append($row);
+                                    }
                                 }
-                            );
+                                catch (ex)
+                                {}
 
-                        })(world.tanks[i]);
-                    }
+                                function findTank(id)
+                                {
+                                    return world.tanks[id];
+                                }
 
-                    sandbox.eval(
-                        "__get_watch_list__()",
-                        function(watch) {
+                                try
+                                {
+                                    for (var id in data["command"])
+                                    {
+                                        var tank = findTank(id);
+                                        tank.applyActions(data["command"][id]);
+                                    }
+                                }
+                                catch (ex)
+                                {}
 
-                            try
+                                try
+                                {
+                                    world.debugRects = data["rects"];
+                                }
+                                catch (ex)
+                                {}
+
+                                appendConsoleLogs(data["logs"]);
+                            },
                             {
-                                var $table = $watch.find("tbody");
-                                $table.empty();
-    
-                                var keys = [];
-                                
-                                for (var key in watch)
-                                {
-                                    keys.push(key);
-                                }
-    
-                                keys.sort();
-                                
-                                for (var i=0; i < keys.length; i++)
-                                {
-                                    var key = keys[i];
-                                    $row = $("<tr />");
-                                    $row.append($("<td class='name' />").text(key));
-                                    $row.append($("<td class='value' />").text(
-                                        JSON.stringify(watch[key], undefined, 2)
-                                    ));
-                                    $table.append($row);
-                                }
+                                "step": world.stepCount(),
+                                "friends": getFriends(),
+                                "enemies": [],
+                                "bullets": getBullets(),
+                                "collisions": world.collisions,
                             }
-                            catch(ex)
-                            {}
-
-                        }
-                    );
-
-                    sandbox.eval(
-                        "__clear_rect_list__()",
-                        function(rects) {
-                            world.debugRects = rects;
-                        }
-                    );
-
-                    updateConsoleLogs();
+                        );
+                    },
                 }
             );
 
@@ -654,18 +677,28 @@ function __init__(world, friends)
 }
 
 /*
- * called on each step of the simulation for each tank you control
+ * called on each step of the simulation
  * @param step - step count
- * @param tank - the tank
  * @param friends - array of friendly tanks in the world
  * @param enemies - array of enemy tanks in the world
+ * @param bullets - array of bullets in the world
+ * @param collisions - collisions that happened in this step
  */
-function __update__(step, tank, friends, enemies)
+function __update__(step, friends, enemies, bullets, collisions)
 {
     // use the __watch__ function to display values in the watch list
     __watch__("step", step);
-    __watch__("tank id=" + tank.id, tank);
+    __watch__("friends", friends);
+    __watch__("enemies", enemies);
+}
 
+/*
+ * called on each step of the simulation for each tank you control
+ * @param step - step count
+ * @param tank - the tank to command
+ */
+function __command__(step, tank)
+{
     return {
         //TODO: return action(s) to do in this step:
         // "accel": /* "forward" or "reverse" */,

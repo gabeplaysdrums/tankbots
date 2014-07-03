@@ -1,3 +1,12 @@
+var __watch__;
+var __get_watch_list__;
+var __log__;
+var __get_log_messages__;
+var __clear_log_messages__;
+var __rect__;
+var __get_rect_list__;
+var __clear_rect_list__;
+
 function __dispatch_init__(data)
 {
     if (typeof "__init__" !== "undefined")
@@ -7,31 +16,55 @@ function __dispatch_init__(data)
             return __init__(data.world, data.friends);
         }
         catch(ex)
-        {
-        }
+        {}
     }
 
     return null;
 }
 
-function __dispatch_update__(data)
+function __step__(data)
 {
+    var results = {
+        "command": {},
+    };
+
     if (typeof "__update__" !== "undefined")
     {
         try 
         {
-            return __update__(data.step, data.tank, data.friends, data.enemies);
+            __update__(
+                data.step, 
+                data.friends, 
+                data.enemies, 
+                data.bullets, 
+                data.collisions
+            );
         }
         catch(ex)
+        {}
+    }
+
+    if (typeof "__command__" !== "undefined")
+    {
+        for (var i=0; i < data.friends.length; i++)
         {
+            var tank = data.friends[i];
+
+            try
+            {
+                results["command"][tank.id] = __command__(data.step, tank);
+            }
+            catch(ex)
+            {}
         }
     }
 
-    return null;
-}
+    results["watch"] = __get_watch_list__();
+    results["logs"]  = __clear_log_messages__();
+    results["rects"] = __clear_rect_list__();
 
-var __watch__;
-var __get_watch_list__;
+    return results;
+}
 
 (function() {
 
@@ -46,10 +79,6 @@ var __get_watch_list__;
     }
 
 })();
-
-var __log__;
-var __get_log_messages__;
-var __clear_log_messages__;
 
 (function() {
 
@@ -113,10 +142,6 @@ var __clear_log_messages__;
     console.clear = function(){};
 
 })();
-
-var __rect__;
-var __get_rect_list__;
-var __clear_rect_list__;
 
 (function() {
 

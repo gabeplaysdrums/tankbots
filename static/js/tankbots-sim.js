@@ -29,6 +29,7 @@ window.requestAnimFrame = (function(){
     var b2Vec2 = Box2D.Common.Math.b2Vec2;
     var b2WeldJointDef = Box2D.Dynamics.Joints.b2WeldJointDef;
     var b2World = Box2D.Dynamics.b2World;
+    var b2ContactListener = Box2D.Dynamics.b2ContactListener;
 
     // constants
     var SCALE = 30;
@@ -73,34 +74,30 @@ window.requestAnimFrame = (function(){
     }
 
     // forward declare
-    var World, Tank;
+    var World, Destructable, Tank, Bullet;
 
     World = Class.create({
 
-        initialize: function(width, height, onstep) {
+        initialize: function(width, height, options) {
 
-            if (onstep === undefined)
-            {
-                onstep = function(){};
-            }
-
+            var self = this;
             this._width = width;
             this._height = height;
             this._running = false;
-            this._onstep = onstep;
+            this._onstep = options["onstep"] || function(){};
             this._stepCount = 0;
             this._obstacles = [];
-            this.tanks = [];
+            this.tanks = {};
+            this.bullets = [];
+            this.collisions = [];
             this.debugRects = [];
             this.debugOverlaysEnabled = true;
 
             // create the world
-            this._world = new b2World(new b2Vec2(0, 0), true);
+            this._b2World = new b2World(new b2Vec2(0, 0), true);
 
             // create walls
             {
-                var self = this;
-
                 function addWall(width, height, x, y)
                 {
                     var fixDef = new b2FixtureDef();
@@ -115,7 +112,7 @@ window.requestAnimFrame = (function(){
                     bodyDef.position.x = coord(x);
                     bodyDef.position.y = coord(y);
     
-                    var body = self._world.CreateBody(bodyDef);
+                    var body = self._b2World.CreateBody(bodyDef);
                     body.CreateFixture(fixDef);
                     self._obstacles.push({ "bounds": getBounds([ body ]) });
                 }
@@ -124,6 +121,54 @@ window.requestAnimFrame = (function(){
                 addWall(this._width, 10, this._width / 2, 0);
                 addWall(10, this._height, 0, this._height / 2);
                 addWall(10, this._height, this._width, this._height / 2);
+            }
+
+            // handle collisions
+            {
+                var listener = new b2ContactListener();
+
+                listener.PostSolve = function(contact, impulse) {
+                    var userDataA = contact.GetFixtureA().GetBody().GetUserData();
+                    var userDataB = contact.GetFixtureB().GetBody().GetUserData();
+
+                    /*
+                    console.info(
+                        "@Collide: " + 
+                        "\n  A= " + userDataA + 
+                        "\n  B= " + userDataB + 
+                        "\n  impulse= " + JSON.stringify(impulse, undefined, 2));
+                    */
+
+                    if (userDataA instanceof Destructable)
+                    {
+                        userDataA.hit(impulse, userDataB);
+                    }
+
+                    if (userDataB instanceof Destructable)
+                    {
+                        userDataB.hit(impulse, userDataA);
+                    }
+
+                    var bullet, obj;
+
+                    if (userDataA instanceof Bullet && userDataB instanceof Destructable)
+                    {
+                        bullet = userDataA;
+                        obj = userDataB;
+                    }
+                    else if (userDataB instanceof Bullet && userDataA instanceof Destructable)
+                    {
+                        bullet = userDataA;
+                        obj = userDataB;
+                    }
+
+                    if (bullet && obj)
+                    {
+                        self.collisions.push([obj.info(), bullet.info()]);
+                    }
+                };
+
+                this._b2World.SetContactListener(listener);
             }
         },
 
@@ -135,7 +180,7 @@ window.requestAnimFrame = (function(){
             this._debugDraw.SetFillAlpha(0.3);
             this._debugDraw.SetLineThickness(1.0);
             this._debugDraw.SetFlags(b2DebugDraw.e_shapeBit | b2DebugDraw.e_jointBit);
-            this._world.SetDebugDraw(this._debugDraw);
+            this._b2World.SetDebugDraw(this._debugDraw);
             this._worldWidth = $canvas.prop("width") / SCALE;
             this._worldHeight = $canvas.prop("height") / SCALE;
         },
@@ -167,13 +212,15 @@ window.requestAnimFrame = (function(){
 
         step: function() {
 
-            this._world.Step(
+            this.collisions = [];
+
+            this._b2World.Step(
                 1 / 60,   // frame-rate
                 10,       // velocity iterations
                 10        // position iterations
             );
 
-            this._world.DrawDebugData();
+            this._b2World.DrawDebugData();
 
             if (this.debugOverlaysEnabled && this.debugRects)
             {
@@ -193,9 +240,56 @@ window.requestAnimFrame = (function(){
                 }
             }
 
+            // step objects
+            this.tanks = {};
+            this.bullets = [];
+
+            for (var body = this._b2World.GetBodyList(); 
+                 body != null; body = body.GetNext())
+            {
+                var userData = body.GetUserData();
+
+                if (!userData)
+                {
+                    continue;
+                }
+
+                if (userData instanceof Tank)
+                {
+                    userData.step();
+
+                    if (!userData.isAlive())
+                    {
+                        userData.destroy();
+                    }
+                    else
+                    {
+                        this.tanks[userData.id()] = userData;
+                    }
+
+                    continue;
+                }
+
+                if (userData instanceof Bullet)
+                {
+                    userData.step();
+
+                    if (!userData.isAlive())
+                    {
+                        userData.destroy();
+                    }
+                    else
+                    {
+                        this.bullets.push(userData);
+                    }
+
+                    continue;
+                }
+            }
+
             this._onstep();
 
-            this._world.ClearForces();
+            this._b2World.ClearForces();
             this._stepCount++;
         },
 
@@ -204,9 +298,11 @@ window.requestAnimFrame = (function(){
         },
 
         createTank: function(x, y, angle) {
-            var tank = new Tank(this._world, x, y, angle);
-            this.tanks.push(tank);
-            return tank;
+            return new Tank(this._b2World, x, y, angle);
+        },
+
+        createBullet: function(x, y, angle) {
+            return new Bullet(this._b2World, x, y, angle);
         },
 
         info: function() {
@@ -219,11 +315,32 @@ window.requestAnimFrame = (function(){
 
     });
 
-    Tank = Class.create({
+    Destructable = Class.create({
 
-        initialize: function(world, x, y, angle) {
+        initialize: function() {
+        },
+
+        isAlive: function() {
+            return true;
+        },
+
+        hit: function(impulse, other) {
+        },
+
+        destroy: function() {
+        },
+
+    });
+
+    Tank = Class.create(Destructable, {
+
+        initialize: function(b2World, x, y, angle) {
 
             this._id = Math.floor(100000 * Math.random());
+            this._turretHeat = 0;
+            this._b2World = b2World;
+            this._health = 100;
+            this.turretEnabled = true;
 
             var FRICTION = 0.5;
             var pos = new b2Vec2(coord(x), coord(y));
@@ -241,8 +358,9 @@ window.requestAnimFrame = (function(){
                 bodyDef.type = b2Body.b2_dynamicBody;
                 bodyDef.position = pos;
                 bodyDef.angle = angle;
+                bodyDef.userData = this;
 
-                this._body = world.CreateBody(bodyDef)
+                this._body = this._b2World.CreateBody(bodyDef)
                 this._body.SetLinearDamping(2.5);
                 this._body.SetAngularDamping(4.0);
 
@@ -255,8 +373,9 @@ window.requestAnimFrame = (function(){
                 bodyDef.type = b2Body.b2_dynamicBody;
                 bodyDef.position = pos;
                 bodyDef.angle = angle;
+                bodyDef.userData = this;
 
-                this._turret = world.CreateBody(bodyDef)
+                this._turret = this._b2World.CreateBody(bodyDef)
                 this._turret.SetAngularDamping(40.0);
 
                 {
@@ -292,45 +411,23 @@ window.requestAnimFrame = (function(){
             {
                 var jointDef = new b2RevoluteJointDef();
                 jointDef.Initialize(this._body, this._turret, this._body.GetWorldCenter());
-                this._joint = world.CreateJoint(jointDef);
+                this._joint = this._b2World.CreateJoint(jointDef);
 
                 this._joint.EnableMotor(true);
             }
         
         },
 
+        id: function() {
+            return this._id;
+        },
+
         info: function() {
             var pos = this._body.GetWorldCenter();
             var vel = this._body.GetLinearVelocity();
 
-            var bodyList = [
-                this._body,
-                this._turret,
-            ];
-
-            var aabb = null;
-
-            for (var i=0; i < bodyList.length; i++)
-            {
-                for (
-                    var fixture = bodyList[i].GetFixtureList();
-                    fixture != null; fixture = fixture.GetNext()
-                )
-                {
-                    var ab = fixture.GetAABB();
-
-                    if (!aabb)
-                    {
-                        aabb = ab;
-                    }
-                    else
-                    {
-                        aabb = b2AABB.Combine(aabb, ab);
-                    }
-                }
-            }
-
             return {
+                "class": "tank",
                 "id": this._id,
                 "position": { "x": pos.x, "y": pos.y },
                 "angle": this._body.GetAngle(),
@@ -338,6 +435,9 @@ window.requestAnimFrame = (function(){
                 "velocity": { "x": vel.x, "y": vel.y },
                 "angularVelocity": this._body.GetAngularVelocity(),
                 "bounds": getBounds([ this._body, this._turret ]),
+                "turretHeat": this._turretHeat,
+                "canFire": this.canFire(),
+                "health": this._health,
             }
         },
 
@@ -354,7 +454,7 @@ window.requestAnimFrame = (function(){
                 var a = this._body.GetAngle();
                 var f = 0;
 
-                var FORCE = 150;
+                var FORCE = 100;
 
                 switch (d)
                 {
@@ -392,6 +492,159 @@ window.requestAnimFrame = (function(){
                 this._body.ApplyTorque(t);
             }
 
+            var t = 0;
+            var s = 0;
+
+            if (actions["turret"])
+            {
+                var d = actions["turret"];
+
+                var MOTOR_SPEED = 200;
+                var MOTOR_TORQUE = 0.2;
+
+                switch (d)
+                {
+                    case "left":
+                        s = -MOTOR_SPEED;
+                        t = MOTOR_TORQUE;
+                        break;
+                    case "right":
+                        s = MOTOR_SPEED;
+                        t = MOTOR_TORQUE;
+                        break;
+                    case "fire":
+                        this._fire();
+                        break;
+                }
+            }
+
+            // turn the turret
+            this._joint.SetMotorSpeed(s);
+            this._joint.SetMaxMotorTorque(t);
+        },
+
+        step: function() {
+            this._turretHeat = Math.max(0, this._turretHeat - 1);
+        },
+
+        canFire: function() {
+            return this.turretEnabled && this._turretHeat <= 0;
+        },
+
+        hit: function(impulse, other) {
+
+            if (other instanceof Bullet)
+            {
+                this._health = Math.max(0, this._health - 200 * impulse.normalImpulses[0]);
+            }
+            else
+            {
+                //this._health -= Math.min(0.001, impulse.normalImpulses[0]);
+            }
+        },
+
+        isAlive: function() {
+            return this._health > 0;
+        },
+
+        destroy: function() {
+            this._b2World.DestroyBody(this._body);
+            this._b2World.DestroyBody(this._turret);
+        },
+
+        toString: function() {
+            return "Tank " + JSON.stringify(this.info(), undefined, 2);
+        },
+
+        _fire: function() {
+
+            var TURRET_COOLDOWN = 120;
+
+            if (this.canFire())
+            {
+                this._turretHeat = TURRET_COOLDOWN;
+
+                var pos = this._turret.GetPosition();
+                var len = coord(40 / 2 + 30);
+
+                pos.Add(new b2Vec2(
+                    len * Math.cos(this._turret.GetAngle()),
+                    len * Math.sin(this._turret.GetAngle())
+                ));
+
+                new Bullet(this._b2World, pos.x, pos.y, this._turret.GetAngle());
+            }
+        },
+
+    });
+
+    Bullet = Class.create(Destructable, {
+        
+        initialize: function(b2World, x, y, angle) {
+
+            this._id = Math.floor(100000 * Math.random());
+            this._b2World = b2World;
+            this._health = 30;
+
+            {
+                var bodyDef = new b2BodyDef();
+                bodyDef.type = b2Body.b2_dynamicBody;
+                bodyDef.position = new b2Vec2(x, y);
+                bodyDef.isBullet = true;
+                bodyDef.userData = this;
+                this._body = this._b2World.CreateBody(bodyDef)
+                this._body.SetLinearDamping(2);
+            }
+
+            {
+                var fixDef = new b2FixtureDef();
+                fixDef.density = 0.01;
+                fixDef.friction = 5;
+                fixDef.restitution = 0.5;
+                fixDef.shape = new b2PolygonShape();
+
+                fixDef.shape.SetAsBox(coord(8 / 2), coord(8 / 2));
+                this._body.CreateFixture(fixDef);
+            }
+
+            var m = 0.07;
+            var v = new b2Vec2(m * Math.cos(angle), m * Math.sin(angle));
+            this._body.ApplyImpulse(v, this._body.GetPosition());
+        },
+
+        step: function() {
+            this._health--;
+        },
+
+        hit: function(impulse) {
+            this._health = 0;
+        },
+
+        isAlive: function() {
+            return this._health > 0;
+        },
+
+        destroy: function() {
+            this._b2World.DestroyBody(this._body);
+        },
+
+        info: function() {
+            return {
+                "class": "bullet",
+                "id": this._id,
+                "position": {
+                    "x": this._body.GetPosition().x,
+                    "y": this._body.GetPosition().y,
+                },
+                "velocity": {
+                    "x": this._body.GetLinearVelocity().x,
+                    "y": this._body.GetLinearVelocity().y,
+                },
+            };
+        },
+
+        toString: function() {
+            return "Bullet " + JSON.stringify(this.info(), undefined, 2);
         },
 
     });
@@ -402,6 +655,8 @@ window.requestAnimFrame = (function(){
         window.TankBots.Sim = {};
         window.TankBots.Sim.World = World;
         window.TankBots.Sim.Tank = Tank;
+        window.TankBots.Sim.Bullet = Bullet;
+        window.TankBots.Sim.Destructable = Destructable;
     }
 
 })();
