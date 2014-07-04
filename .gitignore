@@ -1,3 +1,15 @@
 *.swp
 *.swo
 *.pyc
+db.sqlite3
+
+# google app engine data
+.gaedata/
+
+# djangoappengine
+# http://www.allbuttonspressed.com/projects/djangoappengine
+autoload/
+dbindexer/
+django/
+djangoappengine/
+djangotoolbox/
