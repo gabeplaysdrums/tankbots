@@ -14,11 +14,17 @@ ALLOWED_HOSTS = (
     'tankbots-game.appspot.com',
 )
 
-INSTALLED_APPS += (
+INSTALLED_APPS = (
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
     'djangotoolbox',
     'autoload',
     'dbindexer',
-
+) + MY_APPS + (
     # djangoappengine should come last, so it can override a few manage.py commands
     'djangoappengine',
 )

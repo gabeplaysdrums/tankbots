@@ -201,6 +201,7 @@
 <script src="{% static 'js/jsandbox.js' %}"></script>
 <script src="{% static 'js/Box2dWeb-2.1.a.3.min.js' %}"></script>
 <script src="{% static 'js/tankbots-sim.js' %}"></script>
+<script src="{% static 'js/tankbots-game.js' %}"></script>
 <script src="{% static 'js/jqconsole.min.js' %}"></script>
 <script type="text/javascript">
 
@@ -217,6 +218,7 @@
         var jqconsole;
         var debugDraw;
         var applyCode;
+        var controller;
 
         // setup code panel
         {
@@ -525,6 +527,8 @@
                 {
                     onstep: function() {
 
+                        controller.step();
+
                         sandbox.eval(
                             "__step__(input)",
                             function (data) {
@@ -587,23 +591,29 @@
                                 "friends": getFriends(),
                                 "enemies": [],
                                 "bullets": getBullets(),
-                                "collisions": world.collisions,
+                                "collisions": world.collisionsInfo,
                             }
                         );
                     },
                 }
             );
 
-            for (var i=0; i < 3; i++)
-            {
-                world.createTank(
-                    Math.random() * worldWidth, 
-                    Math.random() * worldHeight,
-                    Math.random() * 2 * Math.PI
-                );
-            }
-
             debugDraw = world.createDebugDraw($canvas);
+            controller = new {{ controller_class }}(world, {
+                log: function(message) {
+                    jqconsole.Write(message + "\n", "jqconsole-info");
+                },
+                missionBegin: function() {
+                    jqconsole.Write("-- @Mission: new mission started --\n", 'jqconsole-info');
+                },
+                missionEnd: function(success, score) {
+                    jqconsole.Write(
+                        "-- @Mission: mission " + (success ? "succeeded" : "failed") + 
+                        "; score: " + score + " --\n", 
+                        "jqconsole-info"
+                    );
+                },
+            });
         }
 
         applyCode();

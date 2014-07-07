@@ -31,7 +31,6 @@ window.requestAnimFrame = (function(){
     var b2World = Box2D.Dynamics.b2World;
     var b2ContactListener = Box2D.Dynamics.b2ContactListener;
 
-    // constants
     var SCALE = 30;
 
     // translate from window to world coordinates
@@ -90,6 +89,7 @@ window.requestAnimFrame = (function(){
             this.tanks = {};
             this.bullets = [];
             this.collisions = [];
+            this.collisionsInfo = [];
             this.debugRects = [];
             this.debugOverlaysEnabled = true;
 
@@ -164,7 +164,8 @@ window.requestAnimFrame = (function(){
 
                     if (bullet && obj)
                     {
-                        self.collisions.push([obj.info(), bullet.info()]);
+                        self.collisions.push([obj, bullet]);
+                        self.collisionsInfo.push([obj.info(), bullet.info()]);
                     }
                 };
 
@@ -213,6 +214,7 @@ window.requestAnimFrame = (function(){
         step: function() {
 
             this.collisions = [];
+            this.collisionsInfo = [];
 
             this._b2World.Step(
                 1 / 60,   // frame-rate
@@ -343,7 +345,7 @@ window.requestAnimFrame = (function(){
             this.turretEnabled = true;
 
             var FRICTION = 0.5;
-            var pos = new b2Vec2(coord(x), coord(y));
+            var pos = new b2Vec2(x, y);
 
             // create the tank body
             {
@@ -651,8 +653,8 @@ window.requestAnimFrame = (function(){
 
     // exports
     {
-        window.TankBots = {};
-        window.TankBots.Sim = {};
+        window.TankBots = window.TankBots || {};
+        window.TankBots.Sim = window.TankBots.Sim || {};
         window.TankBots.Sim.World = World;
         window.TankBots.Sim.Tank = Tank;
         window.TankBots.Sim.Bullet = Bullet;
